@@ -25,6 +25,12 @@
 
     var map;
     var mark;
+    var pnChannel = "raspi-tracker";
+
+    var pubnub = new PubNub({
+      publishKey:   'pub-c-fcfacaeb-c7a7-40f4-96d1-81a4ff666ef6',
+      subscribeKey: 'sub-c-d7125796-5b0f-42ec-9fb0-dfb3f2112cc3'
+    });
     var lineCoords = [];
       
     var initialize = function() {
@@ -34,32 +40,53 @@
 
     window.initialize = initialize;
 
+    const updateMap = function() {
+      const lastCoord = lineCoords.slice(-1)[0];
+      if (lastCoord) {
+        map.setCenter(lastCoord);
+        mark.setPosition(lastCoord);
+        
+        var lineCoordinatesPath = new google.maps.Polyline({
+            path: lineCoords,
+            geodesic: true,
+            strokeColor: '#2E10FF'
+          });
+          
+        lineCoordinatesPath.setMap(map);
+      }
+    }
+
+    const fetchHistory = function() {
+      pubnub.fetchMessages(
+        {
+          channels: [pnChannel],
+          count: 100 // default/max is 25 messages for multiple channels (up to 500)
+        },
+        function(status, response) {
+          response?.channels?.[pnChannel]?.forEach(payload => {
+            if(payload.message.lat) {
+              lat = payload.message.lat;
+              lng = payload.message.lng;
+              lineCoords.push(new google.maps.LatLng(lat, lng));
+            }
+          });
+          updateMap();
+        }
+      );
+    }
+
+    fetchHistory();
+
     var redraw = function(payload) {
       if(payload.message.lat){
-      lat = payload.message.lat;
-      lng = payload.message.lng;
+        lat = payload.message.lat;
+        lng = payload.message.lng;
 
-      map.setCenter({lat:lat, lng:lng, alt:0});
-      mark.setPosition({lat:lat, lng:lng, alt:0});
-      
-      lineCoords.push(new google.maps.LatLng(lat, lng));
-
-      var lineCoordinatesPath = new google.maps.Polyline({
-        path: lineCoords,
-        geodesic: true,
-        strokeColor: '#2E10FF'
-      });
-      
-      lineCoordinatesPath.setMap(map);}
+        lineCoords.push(new google.maps.LatLng(lat, lng));
+        updateMap();
+      }
     };
 
-    var pnChannel = "raspi-tracker";
-
-    var pubnub = new PubNub({
-      publishKey:   'pub-c-fcfacaeb-c7a7-40f4-96d1-81a4ff666ef6',
-      subscribeKey: 'sub-c-d7125796-5b0f-42ec-9fb0-dfb3f2112cc3'
-    });
-        
     document.querySelector('#action').addEventListener('click', function(){
         var text = document.getElementById("action").textContent;
         if(text == "Start Tracking"){
